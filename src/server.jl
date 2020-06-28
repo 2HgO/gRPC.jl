@@ -19,14 +19,14 @@ function read_request(channel::gRPCChannel, controller::gRPCController, services
     headers = evt.headers
     method = headers[":method"]
     path = headers[":path"]
-    pathcomps = split(path, "/"; keep=false)
+    pathcomps = split(path, "/"; keepempty=false)
     if length(pathcomps) != 2
         @debug("unexpected path while reading request (closing channel)", path)
         close(channel)
         return (nothing, nothing, nothing)
     end
 
-    servicename, methodname = split(path, "/"; keep=false)
+    servicename, methodname = split(path, "/"; keepempty=false)
 
     if evt.is_end_stream
         data = UInt8[]
