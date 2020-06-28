@@ -47,11 +47,13 @@ function read_request(channel::gRPCChannel, controller::gRPCController, services
 end
 
 function write_response(channel::gRPCChannel, controller::gRPCController, response)
-    sending_headers = [(":status", "200")]
+    sending_headers = Dict(":status" => "200", "content-type" => "application/grpc")
     data_buff = to_delimited_message_bytes(response)
 
     Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, sending_headers, false))
-    Session.put_act!(channel.session, Session.ActSendData(channel.stream_id, data_buff, true))
+    Session.put_act!(channel.session, Session.ActSendData(channel.stream_id, data_buff, false))
+    Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, Dict("grpc-status" => "0"), true))
+    @info "done with request"
     nothing
 end
 
