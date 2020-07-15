@@ -57,6 +57,17 @@ function write_response(channel::gRPCChannel, controller::gRPCController, respon
     nothing
 end
 
+function write_error_response(channel::gRPCChannel, controller::gRPCController, err::Exception)
+    sending_headers = Dict(":status" => "200", "content-type" => "application/grpc")
+    ex = wrap(err)
+
+    Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, sending_headers, false))
+    Session.put_act!(channel.session, Session.ActSendData(channel.stream_id, UInt8[], false))
+    Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, Dict("grpc-status" => string(ex.code), "grpc-message" => ex.message), true))
+    @info "done with request"
+    nothing
+end
+
 function call_method(channel::gRPCChannel, service::ServiceDescriptor, method::MethodDescriptor, controller::gRPCController, request)
     write_request(channel, controller, service, method, request)
     response_type = get_response_type(method)
@@ -93,9 +104,12 @@ function process(controller::gRPCController, srvr::gRPCServer, channel::gRPCChan
             service, method, request = read_request(channel, controller, srvr.services)
             (service === nothing) && continue
 
-            response = call_method(service, method, controller, request)
-            #@debug("response from method", response)
-            write_response(channel, controller, response)
+            try
+                response = call_method(service, method, controller, request)
+                write_response(channel, controller, response)
+            catch e
+                write_error_response(channel, controller, e)
+            end
         end
     catch ex
         @warn("channel stopped with exception", ex)

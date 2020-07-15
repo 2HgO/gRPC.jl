@@ -1,2 +1,8 @@
 name = "gRPC"
 uuid = "3e4ca577-bc38-5376-a83e-2198118cd55e"
+
+[deps]
+HPack = "ac4eac4a-97af-5557-9a41-b7bc20405a4a"
+HTTP2 = "d274f558-d366-508a-a164-2611506323a4"
+ProtoBuf = "3349acd9-ac6a-5e09-bcdb-63829b23a429"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
