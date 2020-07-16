@@ -15,8 +15,13 @@ function read_request(channel::gRPCChannel, controller::gRPCController, services
     end
 
     channel.stream_id = evt.stream_identifier
+    headers = Headers()
+    while isa(evt, EvtRecvHeaders)
+        merge!(headers, evt.headers)
+        evt.is_end_stream && break
+        evt = Session.take_evt!(connection)
+    end
 
-    headers = evt.headers
     method = headers[":method"]
     path = headers[":path"]
     pathcomps = split(path, "/"; keepempty=false)
@@ -28,11 +33,11 @@ function read_request(channel::gRPCChannel, controller::gRPCController, services
 
     servicename, methodname = split(path, "/"; keepempty=false)
 
-    if evt.is_end_stream
-        data = UInt8[]
-    else
-        data_evt = Session.take_evt!(connection)
-        data = data_evt.data
+    data = UInt8[]
+    while isa(evt, EvtRecvData)
+        append!(data, evt.data)
+        evt.is_end_stream && break
+        evt = Session.take_evt!(connection)
     end
 
     @debug("received request", method, path, stream_id=channel.stream_id, servicename, methodname, nbytes=length(data))
@@ -46,6 +51,7 @@ function read_request(channel::gRPCChannel, controller::gRPCController, services
     service, method, request
 end
 
+# TODO: use http connection settings to delimit frame size
 function write_response(channel::gRPCChannel, controller::gRPCController, response)
     sending_headers = Dict(":status" => "200", "content-type" => "application/grpc")
     data_buff = to_delimited_message_bytes(response)
@@ -62,7 +68,7 @@ function write_error_response(channel::gRPCChannel, controller::gRPCController, 
     ex = wrap(err)
 
     Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, sending_headers, false))
-    Session.put_act!(channel.session, Session.ActSendData(channel.stream_id, UInt8[], false))
+    Session.put_act!(channel.session, Session.ActSendData(channel.stream_id, to_delimited_message_bytes(""), false))
     Session.put_act!(channel.session, Session.ActSendHeaders(channel.stream_id, Dict("grpc-status" => string(ex.code), "grpc-message" => ex.message), true))
     @info "done with request"
     nothing
@@ -101,6 +107,7 @@ function process(controller::gRPCController, srvr::gRPCServer, channel::gRPCChan
     @info("start processing channel")
     try
         while(!channel.session.closed)
+            wait(channel.session.channel_evt)
             service, method, request = read_request(channel, controller, srvr.services)
             (service === nothing) && continue
 
